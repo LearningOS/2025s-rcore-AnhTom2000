@@ -14,7 +14,11 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
+
+
+
 use crate::config::MAX_APP_NUM;
+use crate::config::MAX_TASK_NUM;
 use crate::loader::{get_num_app, init_app_cx};
 use crate::sync::UPSafeCell;
 use lazy_static::*;
@@ -22,6 +26,7 @@ use switch::__switch;
 pub use task::{TaskControlBlock, TaskStatus};
 
 pub use context::TaskContext;
+
 
 /// The task manager, where all the tasks are managed.
 ///
@@ -45,6 +50,7 @@ pub struct TaskManagerInner {
     tasks: [TaskControlBlock; MAX_APP_NUM],
     /// id of current `Running` task
     current_task: usize,
+    syscall_count: [[i32;MAX_TASK_NUM];MAX_TASK_NUM], // 维护每个syscall的调用次数
 }
 
 lazy_static! {
@@ -65,6 +71,7 @@ lazy_static! {
                 UPSafeCell::new(TaskManagerInner {
                     tasks,
                     current_task: 0,
+                    syscall_count: [[0;MAX_TASK_NUM];MAX_TASK_NUM],
                 })
             },
         }
@@ -135,8 +142,25 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
-}
+    fn get_task_id(&self) -> usize {
+        let inner = self.inner.exclusive_access();
+        inner.current_task
+    }
 
+
+    fn get_syscall_count(&self,task_id : usize,id:usize) -> usize {
+        let inner = self.inner.exclusive_access();
+        inner.syscall_count[task_id][id] as usize
+    }
+    
+    fn inc_syscall_count(&self,task_id : usize,id:usize) {
+        let mut inner = self.inner.exclusive_access();
+        inner.syscall_count[task_id][id] += 1;
+    }
+    
+
+
+}
 /// Run the first task in task list.
 pub fn run_first_task() {
     TASK_MANAGER.run_first_task();
@@ -168,4 +192,19 @@ pub fn suspend_current_and_run_next() {
 pub fn exit_current_and_run_next() {
     mark_current_exited();
     run_next_task();
+}
+
+/// 统计当前任务调用syscall的次数
+pub fn inc_syscall_count(id:usize){
+    TASK_MANAGER.inc_syscall_count(get_task_id(),id) 
+}
+
+/// 获得当前任务调用syscall的次数
+pub fn get_syscall_count(id:usize)->usize{
+    TASK_MANAGER.get_syscall_count(get_task_id(),id) 
+}
+
+/// 获得当前任务的id
+pub fn get_task_id() -> usize {
+    TASK_MANAGER.get_task_id()
 }

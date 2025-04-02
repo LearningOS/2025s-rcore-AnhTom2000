@@ -1,5 +1,7 @@
 //! Implementation of [`TaskContext`]
 
+
+
 #[derive(Copy, Clone)]
 #[repr(C)]
 /// task context structure containing some registers
@@ -9,7 +11,7 @@ pub struct TaskContext {
     /// Stack pointer
     sp: usize,
     /// s0-11 register, callee saved
-    s: [usize; 12],
+    s: [usize; 12]
 }
 
 impl TaskContext {
@@ -18,7 +20,7 @@ impl TaskContext {
         Self {
             ra: 0,
             sp: 0,
-            s: [0; 12],
+            s: [0; 12]
         }
     }
     /// Create a new task context with a trap return addr and a kernel stack pointer
@@ -29,7 +31,7 @@ impl TaskContext {
         Self {
             ra: __restore as usize,
             sp: kstack_ptr,
-            s: [0; 12],
+            s: [0; 12]
         }
     }
 }
