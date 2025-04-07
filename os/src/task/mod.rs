@@ -15,11 +15,14 @@ mod switch;
 mod task;
 
 use crate::loader::{get_app_data, get_num_app};
+use crate::mm::{MapPermission, VirtAddr};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use lazy_static::*;
 use switch::__switch;
+use crate::config::MAX_TASK_NUM;
 pub use task::{TaskControlBlock, TaskStatus};
 
 pub use context::TaskContext;
@@ -46,6 +49,7 @@ struct TaskManagerInner {
     tasks: Vec<TaskControlBlock>,
     /// id of current `Running` task
     current_task: usize,
+    syscall_count: [[i32;MAX_TASK_NUM];MAX_TASK_NUM], // 维护每个syscall的调用次数
 }
 
 lazy_static! {
@@ -64,6 +68,7 @@ lazy_static! {
                 UPSafeCell::new(TaskManagerInner {
                     tasks,
                     current_task: 0,
+                    syscall_count: [[0;MAX_TASK_NUM];MAX_TASK_NUM],
                 })
             },
         }
@@ -125,6 +130,20 @@ impl TaskManager {
         let inner = self.inner.exclusive_access();
         inner.tasks[inner.current_task].get_trap_cx()
     }
+    fn get_task_id(&self) -> usize {
+        let inner = self.inner.exclusive_access();
+        inner.current_task
+    }
+
+    fn get_syscall_count(&self,task_id : usize,id:usize) -> usize {
+        let inner = self.inner.exclusive_access();
+        inner.syscall_count[task_id][id] as usize
+    }
+    
+    fn inc_syscall_count(&self,task_id : usize,id:usize) {
+        let mut inner = self.inner.exclusive_access();
+        inner.syscall_count[task_id][id] += 1;
+    }
 
     /// Change the current 'Running' task's program break
     pub fn change_current_program_brk(&self, size: i32) -> Option<usize> {
@@ -132,6 +151,7 @@ impl TaskManager {
         let cur = inner.current_task;
         inner.tasks[cur].change_program_brk(size)
     }
+
 
     /// Switch current `Running` task to the task we have found,
     /// or there is no `Ready` task and we can exit with all applications completed
@@ -153,6 +173,51 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+
+    /// Map a new memory area to the current task.
+    fn mmap(&self, start : VirtAddr, end : VirtAddr, permission : MapPermission) -> Result<(), String>{
+        let mut inner = self.inner.exclusive_access();
+        let currcent_task = inner.current_task;
+        let memory_set = &mut inner.tasks[currcent_task].memory_set;
+        let mut next = start.floor();
+        let end1 = end.ceil();
+        while next < end1{
+           if let Some(pte) = memory_set.translate(next){
+                if pte.is_valid(){
+                    return Err("mmap error: is already mapped".to_string());
+                }
+            }
+            next.0+=1;
+           }
+           memory_set.insert_framed_area(start, end, permission | MapPermission::U);
+        Ok(())
+    }
+
+    /// unmap a memory area from the current task.
+    fn munmap(&self,start:VirtAddr,end:VirtAddr)->Result<(),String>{
+        let mut inner = self.inner.exclusive_access();
+        let currcent_task = inner.current_task;
+        let memory_set = &mut inner.tasks[currcent_task].memory_set;
+        let mut next = start.floor();
+        let end1 = end.ceil();
+        while next < end1{
+            if let Some(pte) = memory_set.translate(next){
+                if !pte.is_valid(){
+                    return Err("munmap error: is not mapped".to_string());
+                }
+            }
+            next.0+=1;
+        }
+      match memory_set.remove_framed_area(start, end) {
+          Some(_)=>{
+            Ok(())
+          },None=>{
+              return Err("munmap error: is not mapped".to_string());
+          }
+      }
+    }
+
+    
 }
 
 /// Run the first task in task list.
@@ -201,4 +266,39 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 /// Change the current 'Running' task's program break
 pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
+}
+
+/// 统计当前任务调用syscall的次数
+pub fn inc_syscall_count(id:usize){
+    TASK_MANAGER.inc_syscall_count(get_task_id(),id) 
+}
+
+/// 获得当前任务调用syscall的次数
+pub fn get_syscall_count(id:usize)->usize{
+    TASK_MANAGER.get_syscall_count(get_task_id(),id) 
+}
+
+/// 获得当前任务的id
+pub fn get_task_id() -> usize {
+    TASK_MANAGER.get_task_id()
+}
+
+/// map memory
+pub fn mmap(start:usize,len:usize,prot:usize) -> Result<(),String>{
+    let mut permission = MapPermission::empty();
+    if (prot & 0x1) != 0{
+        permission.insert(MapPermission::R);
+    }
+    if (prot & 0x2) != 0{
+        permission.insert(MapPermission::W);
+    }
+    if (prot & 0x4) != 0{
+        permission.insert(MapPermission::X);
+    }
+    return TASK_MANAGER.mmap(VirtAddr(start),VirtAddr(len+start),permission);
+}
+
+/// unmap memory
+pub fn munmap(start:usize,len:usize)->Result<(),String>{
+    return TASK_MANAGER.munmap(VirtAddr(start),VirtAddr(len+start));
 }
