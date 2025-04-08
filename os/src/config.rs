@@ -24,4 +24,4 @@ pub const CLOCK_FREQ: usize = 12500000;
 /// the physical memory end
 pub const MEMORY_END: usize = 0x88000000;
 /// 最大任务数
-pub const MAX_TASK_NUM:usize = 600;
+pub const MAX_TASK_NUM:usize = 700;

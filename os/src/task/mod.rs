@@ -179,8 +179,10 @@ impl TaskManager {
         let mut inner = self.inner.exclusive_access();
         let currcent_task = inner.current_task;
         let memory_set = &mut inner.tasks[currcent_task].memory_set;
+
         let mut next = start.floor();
         let end1 = end.ceil();
+
         while next < end1{
            if let Some(pte) = memory_set.translate(next){
                 if pte.is_valid(){
@@ -208,13 +210,8 @@ impl TaskManager {
             }
             next.0+=1;
         }
-      match memory_set.remove_framed_area(start, end) {
-          Some(_)=>{
-            Ok(())
-          },None=>{
-              return Err("munmap error: is not mapped".to_string());
-          }
-      }
+      memory_set.remove_framed_area(start, end);
+      Ok(())
     }
 
     
@@ -300,5 +297,5 @@ pub fn mmap(start:usize,len:usize,prot:usize) -> Result<(),String>{
 
 /// unmap memory
 pub fn munmap(start:usize,len:usize)->Result<(),String>{
-    return TASK_MANAGER.munmap(VirtAddr(start),VirtAddr(len+start));
+    return TASK_MANAGER.munmap(VirtAddr(start),VirtAddr(len+start).into());
 }

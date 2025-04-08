@@ -66,27 +66,27 @@ pub fn sys_trace(trace_request: usize, id: usize, data: usize) -> isize {
             return -1;
         }
         let pte = pte.unwrap();
-        if !pte.is_valid() && !pte.is_user(){
+        
+        if !pte.is_valid() || !pte.is_user(){
             return -1;
         }
         if trace_request == TraceMode::Read as usize && pte.readable(){
             let res  = pte.ppn().get_bytes_array()[addr.page_offset()]; // 通过页表项查找物理地址
             return res as isize;
         }else if trace_request == TraceMode::Write as usize && pte.writable(){
-            let phy_addr = pte.ppn().get_bytes_array()[addr.page_offset()] as *mut u8; // 通过页表项查找物理地址
-            unsafe {
-                phy_addr.write(data as u8); 
-            }
+            let target_ptr = &mut pte.ppn().get_bytes_array()[addr.page_offset()];
+            *target_ptr = data as u8;
             return 0;
         }else {
             return -1;
         }
     }else if trace_request == TraceMode::Select as usize{
-        return task::get_syscall_count(id) as isize;
+        let syscall_count = task::get_syscall_count(id);
+        return syscall_count as isize;
     }else {
        trace!("Unsupported trace request: {}", trace_request);
+       -1
     }
-    -1
 }
 
 // YOUR JOB: Implement mmap.
@@ -95,6 +95,10 @@ pub fn sys_mmap(start: usize, len: usize, prot: usize) -> isize {
     if (prot & !0x7) !=0 || (prot & 0x7) == 0{
         return -1;
     }
+    if start%4096!=0{
+        return -1;
+    }
+
     if let Err(error) = task::mmap(start, len, prot) {
         trace!("kernel: sys_mmap error: {}", error);
         return -1;
