@@ -35,31 +35,20 @@ pub fn sys_yield() -> isize {
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
 pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
     trace!("kernel: sys_get_time");
-    let us = get_time_us(); 
-    let sec = us / 1_000_000; 
-    let usec = us % 1_000_000;
-    
-    let time = TimeVal {
-        sec,
-        usec,
+    let us = get_time_us();
+
+    let time_val = TimeVal {
+        sec: us / 1_000_000,
+        usec: us % 1_000_000,
     };
-      
-    let time_bytes = unsafe {
-        core::slice::from_raw_parts(
-            &time as *const TimeVal as *const u8,
-            core::mem::size_of::<TimeVal>(),
-        )
-    };
-    let buffers =translated_byte_buffer(
-        current_user_token(),
-        ts as *const u8,
-        core::mem::size_of::<TimeVal>(),
-    );
-    
+    let src: *const u8 = unsafe { core::mem::transmute(&time_val) };
+    let len = core::mem::size_of::<TimeVal>();
+    let buffers = translated_byte_buffer(current_user_token(), ts as *const u8, len);
+    let mut offset = 0;
     for buffer in buffers {
-        let len = buffer.len();
-        let time_bytes = &time_bytes[..len];
-        buffer.copy_from_slice(time_bytes) ;
+        buffer
+            .copy_from_slice(unsafe { core::slice::from_raw_parts(src.add(offset), buffer.len()) });
+        offset += buffer.len();
     }
     
     0
