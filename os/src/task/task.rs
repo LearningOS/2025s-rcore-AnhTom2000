@@ -278,7 +278,6 @@ impl TaskControlBlock {
 
     /// Unmap a memory area for current task.
     pub fn unmap(&self,start: VirtAddr, end: VirtAddr) -> Result<(), &'static str> {
-
         let memory_set = &mut self.inner_exclusive_access().memory_set;
 
         let mut next = start.floor();
