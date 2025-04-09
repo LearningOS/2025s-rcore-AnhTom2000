@@ -2,12 +2,13 @@
 use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
 use crate::config::TRAP_CONTEXT_BASE;
-use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
+use crate::mm::{MapPermission, MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
 use core::cell::RefMut;
+
 
 /// Task control block structure
 ///
@@ -68,6 +69,15 @@ pub struct TaskControlBlockInner {
 
     /// Program break
     pub program_brk: usize,
+
+    /// Process stride
+    pub stride : usize,
+
+    /// Process pass
+    pub pass :usize,
+
+    /// Process priority
+    pub priority : usize
 }
 
 impl TaskControlBlockInner {
@@ -118,6 +128,9 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: user_sp,
                     program_brk: user_sp,
+                    stride : 0,
+                    pass : 0,
+                    priority : 16
                 })
             },
         };
@@ -191,6 +204,9 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
+                    pass:0,
+                    stride: 0,
+                    priority : 16
                 })
             },
         });
@@ -235,6 +251,59 @@ impl TaskControlBlock {
         } else {
             None
         }
+    }
+     /// Map a new memory area for current task.
+    pub fn mmap(
+        &self,
+        start: VirtAddr,
+        end: VirtAddr,
+        permission: MapPermission,
+    ) -> Result<(), &'static str> {
+        let memory_set = &mut self.inner_exclusive_access().memory_set;
+
+        let mut next = start.floor();
+        let end2 = end.ceil();
+
+        while next < end2 {
+            if let Some(pte) = memory_set.translate(next) {
+                if pte.is_valid() {
+                    return Err("pte is valid");
+                }
+            }
+            next.0 += 1;
+        }
+        memory_set.insert_framed_area(start, end, permission | MapPermission::U);
+        Ok(())
+    }
+
+    /// Unmap a memory area for current task.
+    pub fn unmap(&self,start: VirtAddr, end: VirtAddr) -> Result<(), &'static str> {
+
+        let memory_set = &mut self.inner_exclusive_access().memory_set;
+
+        let mut next = start.floor();
+        let end2 = end.ceil();
+
+        while next < end2 {
+            if let Some(pte) = memory_set.translate(next) {
+                if !pte.is_valid() {
+                    return Err("pte is invalid");
+                }
+            }
+            next.0 += 1;
+        }
+        memory_set.remove_framed_area(start, end);
+        Ok(())
+    }
+
+    /// set child process
+    pub fn set_child(&self,child:Arc<TaskControlBlock>){
+        self.inner.exclusive_access().children.push(child);
+    }
+    
+    /// set priority
+    pub fn set_priority(&self,prio : usize){
+        self.inner.exclusive_access().priority = prio;
     }
 }
 
