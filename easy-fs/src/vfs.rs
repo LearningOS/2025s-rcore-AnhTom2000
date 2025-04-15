@@ -3,7 +3,7 @@ use super::{
     EasyFileSystem, DIRENT_SZ,
 };
 use ::alloc::string::String;
-use alloc::{string::ToString, sync::Arc};
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use spin::{Mutex, MutexGuard};
 /// Virtual filesystem layer over easy-fs
@@ -263,7 +263,7 @@ impl Inode {
         block_cache_sync_all();
         match res {
             Ok(0) => {
-                path.clear();
+                path.clear(); // Uncommented the line to clear the path
                 Ok("clear")
             }
             Err(msg) => Err(msg),
