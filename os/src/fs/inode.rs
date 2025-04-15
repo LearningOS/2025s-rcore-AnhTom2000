@@ -67,7 +67,7 @@ pub fn link_file(old_name: &str, new_name: &str)-> Result<(), &'static str> {
     ROOT_INODE.link_file(old_name, new_name)
 }
 /// file unlink ,if nlink==0 need delete file and drop inode
-pub fn unlink_file(name: &str)-> Result<(), &'static str> {
+pub fn unlink_file(name: &str)-> Result<&'static str, &'static str> {
     ROOT_INODE.unlink_file(name)
 }
 

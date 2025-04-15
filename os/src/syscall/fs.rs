@@ -116,9 +116,13 @@ pub fn sys_linkat(old_name: *const u8, new_name: *const u8) -> isize {
 pub fn sys_unlinkat(name: *const u8) -> isize {
     let token = current_user_token();
     let path = translated_str(token, name);
-    if let Err(_msg) = unlink_file(&path) {
-        print!("no ok");
-        return -1;
+    match unlink_file(&path) {
+        Ok(str)=>{
+           println!("{}",str);
+            0
+        },
+        Err(_msg)=>{
+            -1
+        }
     }
-    0
 }
