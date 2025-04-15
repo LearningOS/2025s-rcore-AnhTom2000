@@ -263,7 +263,7 @@ impl Inode {
         block_cache_sync_all();
         match res {
             Ok(0) => {
-                // path.clear();
+                path.clear();
                 Ok("clear")
             }
             Err(msg) => Err(msg),

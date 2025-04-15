@@ -173,15 +173,14 @@ impl File for OSInode {
     fn stat(&self)->super::Stat {
         let inner = self.inner.exclusive_access();
         let stat=inner.inode.read_disk_inode(|disk_inode| {
-            let mut mode = StatMode::FILE;
-            if disk_inode.is_dir(){
-                mode=StatMode::DIR;
-            }
-            
             Stat {
                 dev: 0,
                 ino: (disk_inode.size/32) as u64,
-                mode: mode,
+                mode: if disk_inode.is_dir(){
+                    StatMode::DIR
+                }else {
+                    StatMode::FILE
+                },
                 nlink: disk_inode.nlink,
                 pad: Default::default(),
             }
